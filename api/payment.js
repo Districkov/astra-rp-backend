@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     return res.json({ 
       status: 'working',
-      message: 'Astra RP Payment API',
+      message: '✅ Astra RP API работает!',
       timestamp: new Date().toISOString()
     });
   }
@@ -19,16 +20,22 @@ export default async function handler(req, res) {
     try {
       const { amount, email, username } = req.body;
       
-      // Здесь будет логика Т-Банк
+      // Тестовый ответ (пока без Т-Банк)
       return res.json({
         success: true,
         message: 'Платеж обработан',
-        orderId: `TEST_${Date.now()}`,
-        paymentUrl: 'https://tbank-test.com'
+        orderId: `ASTRA_${Date.now()}`,
+        paymentUrl: 'https://example.com',
+        test: true
       });
       
     } catch (error) {
-      return res.status(500).json({ error: 'Server error' });
+      return res.status(500).json({ 
+        success: false,
+        error: 'Server error' 
+      });
     }
   }
+
+  return res.status(404).json({ error: 'Not found' });
 }
