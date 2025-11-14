@@ -1,4 +1,5 @@
 {
-  "name": "astra-rp-backend",
-  "version": "1.0.0"
+  "name": "astra-rp-backend", 
+  "version": "1.0.0",
+  "type": "module"
 }
