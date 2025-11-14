@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 const TBANK_CONFIG = {
   terminal: '1763019363347DEMO',
   password: '_yu8*mk*O9Kpx^v2',
-  baseUrl: 'https://rest-api-test.tinkoff.ru/v2' // ТЕСТОВЫЙ URL для демо!
+  baseUrl: 'https://securepay.tinkoff.ru/v2' // Возвращаем оригинальный URL
 };
 
 function generateToken(data) {
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
     console.log('🔄 Инициализация платежа');
     console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
 
-    // Используем ТЕСТОВЫЙ URL для демо
+    // Пробуем с обработкой разных типов ответов
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
@@ -107,7 +107,29 @@ export default async function handler(req, res) {
       body: JSON.stringify(paymentData),
     });
 
-    const result = await tbankResponse.json();
+    // Проверяем тип ответа
+    const contentType = tbankResponse.headers.get('content-type');
+    let result;
+
+    if (contentType && contentType.includes('application/json')) {
+      result = await tbankResponse.json();
+    } else {
+      // Если не JSON, читаем как текст
+      const text = await tbankResponse.text();
+      console.log('📥 Ответ от Т-Банк (текст):', text.substring(0, 500)); // Первые 500 символов
+      
+      // Пробуем распарсить как JSON, если возможно
+      try {
+        result = JSON.parse(text);
+      } catch (e) {
+        result = {
+          Success: false,
+          ErrorCode: 'HTTP_ERROR',
+          Message: 'Сервер вернул не JSON ответ',
+          Details: text.substring(0, 200)
+        };
+      }
+    }
 
     console.log('📥 Ответ от Т-Банк:', JSON.stringify(result, null, 2));
 
@@ -123,6 +145,15 @@ export default async function handler(req, res) {
     } else {
       console.error('❌ Ошибка Т-Банк');
       
+      // Если это демо-терминал, возможно нужно зарегистрировать реальный
+      if (result.ErrorCode === '204') {
+        return res.status(400).json({
+          success: false,
+          error: 'Демо-терминал не работает. Нужно зарегистрировать реальный терминал в Тинькофф',
+          details: 'Перейдите в личный кабинет Тинькофф Кассы для настройки'
+        });
+      }
+      
       return res.status(400).json({
         success: false,
         error: result.Message || 'Ошибка инициализации платежа',
@@ -132,11 +163,11 @@ export default async function handler(req, res) {
     }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', error);
+    console.error('🔥 Серверная ошибка:', error.message);
     
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера'
+      error: 'Внутренняя ошибка сервера: ' + error.message
     });
   }
 }
