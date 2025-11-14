@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 const TBANK_CONFIG = {
   terminal: '1763019363347DEMO',
   password: '_yu8*mk*O9Kpx^v2',
-  baseUrl: 'https://securepay.tinkoff.ru/v2'
+  baseUrl: 'https://rest-api-test.tinkoff.ru/v2' // ТЕСТОВЫЙ URL для демо!
 };
 
 function generateToken(data) {
@@ -16,7 +16,7 @@ function generateToken(data) {
     CustomerKey: data.CustomerKey,
     SuccessURL: data.SuccessURL,
     FailURL: data.FailURL,
-    DATA: JSON.stringify(data.DATA) // Важно: DATA как строка JSON
+    DATA: JSON.stringify(data.DATA)
   };
   
   const sortedKeys = Object.keys(values).sort();
@@ -33,12 +33,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Health check endpoint
   if (req.method === 'GET') {
     return res.json({ 
       status: 'OK', 
@@ -55,7 +53,6 @@ export default async function handler(req, res) {
   try {
     const { amount, email, username } = req.body;
 
-    // Валидация
     if (!amount || !email || !username) {
       return res.status(400).json({
         success: false,
@@ -70,7 +67,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Валидация email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -99,16 +95,10 @@ export default async function handler(req, res) {
     // Генерируем токен
     paymentData.Token = generateToken(paymentData);
 
-    console.log('🔄 Инициализация платежа:', {
-      orderId: paymentData.OrderId,
-      amount: paymentData.Amount,
-      email: paymentData.CustomerKey,
-      username: username
-    });
-
+    console.log('🔄 Инициализация платежа');
     console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
 
-    // Отправляем запрос в Т-Банк
+    // Используем ТЕСТОВЫЙ URL для демо
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
@@ -122,11 +112,7 @@ export default async function handler(req, res) {
     console.log('📥 Ответ от Т-Банк:', JSON.stringify(result, null, 2));
 
     if (result.Success) {
-      console.log('✅ Платеж инициализирован:', {
-        paymentId: result.PaymentId,
-        paymentUrl: result.PaymentURL,
-        orderId: paymentData.OrderId
-      });
+      console.log('✅ Платеж инициализирован');
       
       return res.json({
         success: true,
@@ -135,11 +121,7 @@ export default async function handler(req, res) {
         orderId: paymentData.OrderId
       });
     } else {
-      console.error('❌ Ошибка Т-Банк:', {
-        error: result.ErrorCode,
-        message: result.Message,
-        details: result.Details
-      });
+      console.error('❌ Ошибка Т-Банк');
       
       return res.status(400).json({
         success: false,
@@ -150,10 +132,7 @@ export default async function handler(req, res) {
     }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', {
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('🔥 Серверная ошибка:', error);
     
     return res.status(500).json({
       success: false,
