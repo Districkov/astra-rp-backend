@@ -1,4 +1,4 @@
-// crypto теперь встроен в Node.js, не нужно импортировать
+import { createHash } from 'crypto';
 
 const TBANK_CONFIG = {
   terminal: '1763019363347DEMO',
@@ -7,8 +7,6 @@ const TBANK_CONFIG = {
 };
 
 function generateToken(data) {
-  const crypto = require('crypto'); // Используем встроенный crypto
-  
   const values = {
     TerminalKey: TBANK_CONFIG.terminal,
     Password: TBANK_CONFIG.password,
@@ -19,7 +17,7 @@ function generateToken(data) {
   const sortedKeys = Object.keys(values).sort();
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
   
-  return crypto.createHash('sha256').update(concatenatedValues).digest('hex');
+  return createHash('sha256').update(concatenatedValues).digest('hex');
 }
 
 export default async function handler(req, res) {
@@ -39,7 +37,7 @@ export default async function handler(req, res) {
       status: 'OK', 
       service: 'Astra RP Payment API',
       timestamp: new Date().toISOString(),
-      version: '1.0.0'
+      message: 'API is working!'
     });
   }
 
@@ -65,15 +63,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Валидация email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Введите корректный email адрес'
-      });
-    }
-
     const paymentData = {
       TerminalKey: TBANK_CONFIG.terminal,
       OrderId: `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -89,16 +78,10 @@ export default async function handler(req, res) {
       })
     };
 
-    // Генерируем токен
     paymentData.Token = generateToken(paymentData);
 
-    console.log('🔄 Инициализация платежа:', {
-      orderId: paymentData.OrderId,
-      amount: paymentData.Amount,
-      email: paymentData.CustomerKey
-    });
+    console.log('🔄 Инициализация платежа:', paymentData.OrderId);
 
-    // Отправляем запрос в Т-Банк
     const response = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
@@ -123,8 +106,7 @@ export default async function handler(req, res) {
       
       return res.status(400).json({
         success: false,
-        error: result.Message || 'Ошибка инициализации платежа',
-        details: result.Details
+        error: result.Message || 'Ошибка инициализации платежа'
       });
     }
 
