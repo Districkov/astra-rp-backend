@@ -7,16 +7,22 @@ const TBANK_CONFIG = {
 };
 
 function generateToken(data) {
-  const values = {
-    TerminalKey: TBANK_CONFIG.terminal,
-    Password: TBANK_CONFIG.password,
-    ...data
-  };
-  
+  // Создаем копию объекта без Token
+  const values = { ...data };
   delete values.Token;
+  
+  // Добавляем пароль
+  values.Password = TBANK_CONFIG.password;
+  
+  // Сортируем ключи по алфавиту
   const sortedKeys = Object.keys(values).sort();
+  
+  // Конкатенируем значения
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
   
+  console.log('🔑 Данные для токена:', concatenatedValues);
+  
+  // Создаем хеш
   return createHash('sha256').update(concatenatedValues).digest('hex');
 }
 
@@ -77,7 +83,7 @@ export default async function handler(req, res) {
     const paymentData = {
       TerminalKey: TBANK_CONFIG.terminal,
       OrderId: orderId,
-      Amount: Math.round(amount * 100), // в копейках
+      Amount: Math.round(amount * 100),
       Description: `Пополнение игрового счета ASTRA RP для ${username}`,
       CustomerKey: email,
       SuccessURL: `https://astra-rp.fun/payment-success.html?order=${orderId}&success=true`,
@@ -89,7 +95,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // Генерируем токен
+    // Генерируем токен (ДО добавления в объект)
     paymentData.Token = generateToken(paymentData);
 
     console.log('🔄 Инициализация платежа:', {
@@ -100,6 +106,7 @@ export default async function handler(req, res) {
     });
 
     console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
+    console.log('🔑 Сгенерированный токен:', paymentData.Token);
 
     // Отправляем запрос в Т-Банк
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
