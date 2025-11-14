@@ -72,14 +72,16 @@ export default async function handler(req, res) {
       });
     }
 
+    const orderId = `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     const paymentData = {
       TerminalKey: TBANK_CONFIG.terminal,
-      OrderId: `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      Amount: Math.round(amount * 100),
+      OrderId: orderId,
+      Amount: Math.round(amount * 100), // в копейках
       Description: `Пополнение игрового счета ASTRA RP для ${username}`,
       CustomerKey: email,
-      SuccessURL: `https://astra-rp.fun/payment-success.html`,
-      FailURL: `https://astra-rp.fun/payment-fail.html`,
+      SuccessURL: `https://astra-rp.fun/payment-success.html?order=${orderId}&success=true`,
+      FailURL: `https://astra-rp.fun/payment-fail.html?order=${orderId}&error=true`,
       DATA: JSON.stringify({
         Email: email,
         Username: username,
@@ -96,8 +98,10 @@ export default async function handler(req, res) {
       email: paymentData.CustomerKey
     });
 
+    console.log('📤 Данные для Т-Банк:', paymentData);
+
     // Отправляем запрос в Т-Банк
-    const response = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
+    const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,10 +109,15 @@ export default async function handler(req, res) {
       body: JSON.stringify(paymentData),
     });
 
-    const result = await response.json();
+    const result = await tbankResponse.json();
+
+    console.log('📥 Ответ от Т-Банк:', result);
 
     if (result.Success) {
-      console.log('✅ Платеж инициализирован:', result.PaymentId);
+      console.log('✅ Платеж инициализирован:', {
+        paymentId: result.PaymentId,
+        paymentUrl: result.PaymentURL
+      });
       
       return res.json({
         success: true,
@@ -117,7 +126,7 @@ export default async function handler(req, res) {
         orderId: paymentData.OrderId
       });
     } else {
-      console.error('❌ Ошибка Т-Банк:', result.Message);
+      console.error('❌ Ошибка Т-Банк:', result);
       
       return res.status(400).json({
         success: false,
