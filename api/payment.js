@@ -7,22 +7,23 @@ const TBANK_CONFIG = {
 };
 
 function generateToken(data) {
-  // Создаем копию объекта без Token
-  const values = { ...data };
-  delete values.Token;
+  const values = {
+    TerminalKey: TBANK_CONFIG.terminal,
+    Password: TBANK_CONFIG.password,
+    Amount: data.Amount,
+    OrderId: data.OrderId,
+    Description: data.Description,
+    CustomerKey: data.CustomerKey,
+    SuccessURL: data.SuccessURL,
+    FailURL: data.FailURL,
+    DATA: JSON.stringify(data.DATA) // Важно: DATA как строка JSON
+  };
   
-  // Добавляем пароль
-  values.Password = TBANK_CONFIG.password;
-  
-  // Сортируем ключи по алфавиту
   const sortedKeys = Object.keys(values).sort();
-  
-  // Конкатенируем значения
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
   
   console.log('🔑 Данные для токена:', concatenatedValues);
   
-  // Создаем хеш
   return createHash('sha256').update(concatenatedValues).digest('hex');
 }
 
@@ -95,7 +96,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // Генерируем токен (ДО добавления в объект)
+    // Генерируем токен
     paymentData.Token = generateToken(paymentData);
 
     console.log('🔄 Инициализация платежа:', {
@@ -106,7 +107,6 @@ export default async function handler(req, res) {
     });
 
     console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
-    console.log('🔑 Сгенерированный токен:', paymentData.Token);
 
     // Отправляем запрос в Т-Банк
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
