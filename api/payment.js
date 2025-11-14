@@ -82,11 +82,11 @@ export default async function handler(req, res) {
       CustomerKey: email,
       SuccessURL: `https://astra-rp.fun/payment-success.html?order=${orderId}&success=true`,
       FailURL: `https://astra-rp.fun/payment-fail.html?order=${orderId}&error=true`,
-      DATA: JSON.stringify({
+      DATA: {
         Email: email,
         Username: username,
         Product: 'Game Currency'
-      })
+      }
     };
 
     // Генерируем токен
@@ -95,10 +95,11 @@ export default async function handler(req, res) {
     console.log('🔄 Инициализация платежа:', {
       orderId: paymentData.OrderId,
       amount: paymentData.Amount,
-      email: paymentData.CustomerKey
+      email: paymentData.CustomerKey,
+      username: username
     });
 
-    console.log('📤 Данные для Т-Банк:', paymentData);
+    console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
 
     // Отправляем запрос в Т-Банк
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
@@ -111,12 +112,13 @@ export default async function handler(req, res) {
 
     const result = await tbankResponse.json();
 
-    console.log('📥 Ответ от Т-Банк:', result);
+    console.log('📥 Ответ от Т-Банк:', JSON.stringify(result, null, 2));
 
     if (result.Success) {
       console.log('✅ Платеж инициализирован:', {
         paymentId: result.PaymentId,
-        paymentUrl: result.PaymentURL
+        paymentUrl: result.PaymentURL,
+        orderId: paymentData.OrderId
       });
       
       return res.json({
@@ -126,17 +128,25 @@ export default async function handler(req, res) {
         orderId: paymentData.OrderId
       });
     } else {
-      console.error('❌ Ошибка Т-Банк:', result);
+      console.error('❌ Ошибка Т-Банк:', {
+        error: result.ErrorCode,
+        message: result.Message,
+        details: result.Details
+      });
       
       return res.status(400).json({
         success: false,
         error: result.Message || 'Ошибка инициализации платежа',
-        details: result.Details
+        details: result.Details,
+        errorCode: result.ErrorCode
       });
     }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', error);
+    console.error('🔥 Серверная ошибка:', {
+      message: error.message,
+      stack: error.stack
+    });
     
     return res.status(500).json({
       success: false,
