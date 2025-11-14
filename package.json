@@ -2,7 +2,7 @@
   "name": "astra-rp-backend",
   "version": "1.0.0",
   "type": "module",
-  "dependencies": {
-    "crypto": "^1.0.1"
+  "engines": {
+    "node": ">=18"
   }
 }
