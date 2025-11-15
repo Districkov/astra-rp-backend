@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
 
 const TBANK_CONFIG = {
-  terminal: '1763019363416', // РАБОЧИЙ терминал
-  password: '4NvQuyKHGqYGLr0h', // РАБОЧИЙ пароль
+  terminal: '1763019363347DEMO', // ТЕСТОВЫЙ терминал
+  password: '_yu8*mk*09Kpx^v2', // ТЕСТОВЫЙ пароль
   baseUrl: 'https://securepay.tinkoff.ru/v2'
 };
 
@@ -15,13 +15,9 @@ function generateToken(data) {
     Description: data.Description,
     CustomerKey: data.CustomerKey,
     SuccessURL: data.SuccessURL,
-    FailURL: data.FailURL
+    FailURL: data.FailURL,
+    DATA: JSON.stringify(data.DATA)
   };
-  
-  // DATA добавляем только если есть и не пустой
-  if (data.DATA && Object.keys(data.DATA).length > 0) {
-    values.DATA = JSON.stringify(data.DATA);
-  }
   
   const sortedKeys = Object.keys(values).sort();
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
@@ -37,16 +33,19 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
+  // Health check endpoint
   if (req.method === 'GET') {
     return res.json({ 
       status: 'OK', 
       service: 'Astra RP Payment API',
+      terminal: 'TEST',
       timestamp: new Date().toISOString(),
-      message: 'API is working!'
+      message: 'API готов к тестовым платежам'
     });
   }
 
@@ -57,6 +56,7 @@ export default async function handler(req, res) {
   try {
     const { amount, email, username } = req.body;
 
+    // Валидация
     if (!amount || !email || !username) {
       return res.status(400).json({
         success: false,
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Валидация email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -79,29 +80,37 @@ export default async function handler(req, res) {
       });
     }
 
-    const orderId = `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const orderId = `TEST_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const paymentData = {
       TerminalKey: TBANK_CONFIG.terminal,
       OrderId: orderId,
-      Amount: Math.round(amount * 100),
-      Description: `Пополнение игрового счета ASTRA RP для ${username}`,
+      Amount: Math.round(amount * 100), // в копейках
+      Description: `ТЕСТ: Пополнение игрового счета ASTRA RP для ${username}`,
       CustomerKey: email,
-      SuccessURL: `https://astra-rp.fun/payment-success.html?order=${orderId}&success=true`,
-      FailURL: `https://astra-rp.fun/payment-fail.html?order=${orderId}&error=true`,
+      SuccessURL: `https://astra-rp.fun/donate?success=true&order=${orderId}`,
+      FailURL: `https://astra-rp.fun/donate?error=true&order=${orderId}`,
       DATA: {
         Email: email,
         Username: username,
-        Product: 'Game Currency'
+        Product: 'Game Currency',
+        Test: true
       }
     };
 
     // Генерируем токен
     paymentData.Token = generateToken(paymentData);
 
-    console.log('🔄 Инициализация платежа (РАБОЧИЙ терминал)');
-    console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
+    console.log('🔄 ТЕСТОВАЯ Инициализация платежа:', {
+      orderId: paymentData.OrderId,
+      amount: paymentData.Amount,
+      email: paymentData.CustomerKey,
+      username: username
+    });
 
+    console.log('📤 Данные для Т-Банк (ТЕСТ):', JSON.stringify(paymentData, null, 2));
+
+    // Отправляем запрос в Т-Банк
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
@@ -112,34 +121,49 @@ export default async function handler(req, res) {
 
     const result = await tbankResponse.json();
 
-    console.log('📥 Ответ от Т-Банк:', JSON.stringify(result, null, 2));
+    console.log('📥 Ответ от Т-Банк (ТЕСТ):', JSON.stringify(result, null, 2));
 
     if (result.Success) {
-      console.log('✅ Платеж инициализирован!');
+      console.log('✅ ТЕСТОВЫЙ Платеж инициализирован:', {
+        paymentId: result.PaymentId,
+        paymentUrl: result.PaymentURL,
+        orderId: paymentData.OrderId
+      });
       
       return res.json({
         success: true,
         paymentId: result.PaymentId,
         paymentUrl: result.PaymentURL,
-        orderId: paymentData.OrderId
+        orderId: paymentData.OrderId,
+        testMode: true,
+        message: 'ТЕСТОВЫЙ РЕЖИМ - используйте тестовые карты'
       });
     } else {
-      console.error('❌ Ошибка Т-Банк:', result);
+      console.error('❌ Ошибка Т-Банк (ТЕСТ):', {
+        error: result.ErrorCode,
+        message: result.Message,
+        details: result.Details
+      });
       
       return res.status(400).json({
         success: false,
-        error: result.Message || 'Ошибка инициализации платежа',
+        error: result.Message || 'Ошибка инициализации тестового платежа',
         details: result.Details,
-        errorCode: result.ErrorCode
+        errorCode: result.ErrorCode,
+        testMode: true
       });
     }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', error);
+    console.error('🔥 Серверная ошибка (ТЕСТ):', {
+      message: error.message,
+      stack: error.stack
+    });
     
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера'
+      error: 'Внутренняя ошибка сервера в тестовом режиме',
+      testMode: true
     });
   }
 }
