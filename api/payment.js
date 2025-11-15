@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 
 const TBANK_CONFIG = {
   terminal: '1763019363347DEMO', // ТЕСТОВЫЙ терминал
-  password: '_yu8*mk*09Kpx^v2', // ТЕСТОВЫЙ пароль
+  password: '_yu8*mk*O9Kpx^v2', // ТЕСТОВЫЙ пароль
   baseUrl: 'https://securepay.tinkoff.ru/v2'
 };
 
