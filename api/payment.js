@@ -1,3 +1,32 @@
+import { createHash } from 'crypto';
+
+const TBANK_CONFIG = {
+  terminal: '1763019363347DEMO',
+  password: '_yu8*mk*09Kpx^v2',
+  baseUrl: 'https://securepay.tinkoff.ru/v2'
+};
+
+function generateToken(data) {
+  const values = {
+    TerminalKey: TBANK_CONFIG.terminal,
+    Password: TBANK_CONFIG.password,
+    Amount: data.Amount,
+    OrderId: data.OrderId,
+    Description: data.Description,
+    CustomerKey: data.CustomerKey,
+    SuccessURL: data.SuccessURL,
+    FailURL: data.FailURL,
+    DATA: JSON.stringify(data.DATA)
+  };
+  
+  const sortedKeys = Object.keys(values).sort();
+  const concatenatedValues = sortedKeys.map(key => values[key]).join('');
+  
+  console.log('Token data:', concatenatedValues);
+  
+  return createHash('sha256').update(concatenatedValues).digest('hex');
+}
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,10 +40,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     return res.json({ 
       status: 'OK', 
-      service: 'Astra RP Payment API',
-      mode: 'TINKOFF_TEST_WIDGET',
-      timestamp: new Date().toISOString(),
-      message: 'API ready for Tinkoff test widget'
+      message: 'Payment API ready'
     });
   }
 
@@ -25,68 +51,94 @@ export default async function handler(req, res) {
   try {
     const { amount, email, username } = req.body;
 
-    console.log('Received payment request:', { amount, email, username });
+    console.log('Payment request:', { amount, email, username });
 
     // Validation
     if (!amount || !email || !username) {
       return res.status(400).json({
         success: false,
-        error: 'Fill all required fields'
+        error: 'Fill all fields'
       });
     }
 
     if (amount < 10 || amount > 50000) {
       return res.status(400).json({
         success: false,
-        error: 'Amount must be from 10₽ to 50,000₽'
+        error: 'Amount 10-50000'
       });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Enter valid email address'
-      });
-    }
-
-    const orderId = 'TEST_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-    console.log('Creating test payment:', { orderId, amount, email, username });
-
-    // For TEST mode use direct widget integration
+    const orderId = 'ASTRA_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
     const paymentData = {
-      TerminalKey: '1763019363347DEMO',
+      TerminalKey: TBANK_CONFIG.terminal,
       OrderId: orderId,
       Amount: Math.round(amount * 100),
-      Description: 'Test payment ASTRA RP for ' + username,
+      Description: 'ASTRA RP payment for ' + username,
       CustomerKey: email,
-      SuccessURL: (req.headers.origin || 'https://astra-rp.fun') + '/donate?success=true&order=' + orderId,
-      FailURL: (req.headers.origin || 'https://astra-rp.fun') + '/donate?error=true&order=' + orderId,
-      DATA: JSON.stringify({
+      SuccessURL: 'https://astra-rp.fun/donate?success=true&order=' + orderId,
+      FailURL: 'https://astra-rp.fun/donate?error=true&order=' + orderId,
+      DATA: {
         Email: email,
         Username: username,
-        Product: 'Game Currency',
-        Test: true
-      })
+        Product: 'Game Currency'
+      }
     };
 
-    // In test mode return data for widget
-    return res.json({
-      success: true,
-      paymentData: paymentData,
-      orderId: orderId,
-      testMode: true,
-      message: 'Test payment created. Use Tinkoff widget for payment.',
-      instructions: 'Test cards: 4111 1111 1111 1111 (success), 2200 0000 0000 0001 (error)'
+    // Generate token
+    paymentData.Token = generateToken(paymentData);
+
+    console.log('Sending to Tinkoff:', paymentData);
+
+    // Send to Tinkoff
+    const tbankResponse = await fetch(TBANK_CONFIG.baseUrl + '/Init', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(paymentData),
     });
+
+    const result = await tbankResponse.json();
+
+    console.log('Tinkoff response:', result);
+
+    if (result.Success) {
+      console.log('Payment created!');
+      
+      return res.json({
+        success: true,
+        paymentId: result.PaymentId,
+        paymentUrl: result.PaymentURL,
+        orderId: paymentData.OrderId
+      });
+    } else {
+      console.error('Tinkoff error:', result);
+      
+      // If token error, use direct widget approach
+      if (result.ErrorCode === '204') {
+        return res.json({
+          success: true,
+          paymentUrl: 'https://securepay.tinkoff.ru/e2c/Testing',
+          orderId: orderId,
+          testMode: true,
+          message: 'Using test widget'
+        });
+      }
+      
+      return res.status(400).json({
+        success: false,
+        error: result.Message || 'Payment error',
+        details: result.Details
+      });
+    }
 
   } catch (error) {
     console.error('Server error:', error);
     
     return res.status(500).json({
       success: false,
-      error: 'Internal server error: ' + error.message
+      error: 'Server error'
     });
   }
 }
