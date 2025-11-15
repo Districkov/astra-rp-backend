@@ -1,79 +1,86 @@
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  // Health check endpoint
-  if (req.method === 'GET') {
-    return res.json({ 
-      status: 'OK', 
-      service: 'Astra RP Payment API',
-      mode: 'DEMO_SIMULATION',
-      timestamp: new Date().toISOString(),
-      message: 'API готов к демо-режиму'
-    });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+const processTbankPayment = async () => {
   try {
-    const { amount, email, username } = req.body;
-
-    console.log('📨 Получен запрос на платеж:', { amount, email, username });
-
-    // Валидация
-    if (!amount || !email || !username) {
-      return res.status(400).json({
-        success: false,
-        error: 'Заполните все обязательные поля'
-      });
-    }
-
-    if (amount < 10 || amount > 50000) {
-      return res.status(400).json({
-        success: false,
-        error: 'Сумма должна быть от 10₽ до 50,000₽'
-      });
-    }
-
-    // Валидация email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Введите корректный email адрес'
-      });
-    }
-
-    const orderId = `DEMO_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    console.log('🔄 Демо-платеж создан:', { orderId, amount, email, username });
-
-    // В ДЕМО-РЕЖИМЕ возвращаем фиктивные данные
-    // В реальности здесь будет работа с API Тинькофф
-    return res.json({
-      success: true,
-      paymentId: `demo_${orderId}`,
-      paymentUrl: `https://securepay.tinkoff.ru/e2c/Testing?order=${orderId}`,
-      orderId: orderId,
-      testMode: true,
-      message: 'ДЕМО-РЕЖИМ: Система готова к интеграции с реальным терминалом Тинькофф',
-      instructions: 'Для реальных платежей нужно настроить рабочий терминал в Тинькофф Кассе'
+    console.log('🔄 Отправка платежа...');
+    
+    const response = await fetch(API_CONFIG.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amount,
+        email: email,
+        username: username
+      })
     });
+
+    const result = await response.json();
+    console.log('📦 Данные ответа:', result);
+
+    if (result.success && result.paymentData) {
+      setPaymentStatus({
+        type: 'success',
+        message: `Создан тестовый платеж. Заказ №${result.orderId}`
+      });
+
+      // Сохраняем данные
+      localStorage.setItem('lastPayment', JSON.stringify({
+        orderId: result.orderId,
+        amount: amount,
+        username: username,
+        email: email,
+        timestamp: Date.now()
+      }));
+
+      // Открываем виджет Тинькофф
+      openTinkoffWidget(result.paymentData);
+
+    } else {
+      throw new Error(result.error || 'Неизвестная ошибка от сервера');
+    }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', error);
-    
-    return res.status(500).json({
-      success: false,
-      error: 'Внутренняя ошибка сервера: ' + error.message
-    });
+    console.error('🔥 Ошибка платежа:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Ошибка соединения с сервером платежей';
+    setPaymentStatus({ type: 'error', message: errorMessage });
+    throw error;
   }
-}
+};
+
+// Функция для открытия виджета Тинькофф
+const openTinkoffWidget = (paymentData: any) => {
+  // Создаем форму для Тинькофф
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'https://securepay.tinkoff.ru/e2c/v2/Init';
+  form.style.display = 'none';
+
+  // Добавляем все необходимые поля
+  const fields = {
+    TerminalKey: paymentData.TerminalKey,
+    OrderId: paymentData.OrderId,
+    Amount: paymentData.Amount.toString(),
+    Description: paymentData.Description,
+    CustomerKey: paymentData.CustomerKey,
+    SuccessURL: paymentData.SuccessURL,
+    FailURL: paymentData.FailURL,
+    DATA: paymentData.DATA,
+    // Для тестового режима Token может быть пустым
+    Token: ''
+  };
+
+  Object.entries(fields).forEach(([key, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = value;
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  
+  // Отправляем форму
+  setTimeout(() => {
+    form.submit();
+  }, 1000);
+};
