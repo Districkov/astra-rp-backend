@@ -22,7 +22,13 @@ function generateToken(data) {
   // Конкатенируем значения
   let concatenatedString = '';
   sortedKeys.forEach(key => {
-    concatenatedString += tokenData[key];
+    const value = tokenData[key];
+    // Для объекта DATA конвертируем в строку
+    if (key === 'DATA' && typeof value === 'object') {
+      concatenatedString += JSON.stringify(value);
+    } else {
+      concatenatedString += value;
+    }
   });
   
   console.log('String for token:', concatenatedString);
@@ -76,24 +82,25 @@ export default async function handler(req, res) {
 
     const orderId = `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Данные для платежа с СТАНДАРТНЫМИ страницами Тинькофф
+    // Данные для платежа с ПРАВИЛЬНЫМ форматом DATA
     const paymentData = {
       TerminalKey: TBANK_CONFIG.terminal,
       Amount: Math.round(amount * 100), // в копейках
       OrderId: orderId,
       Description: `Пополнение счета ASTRA RP - ${username}`,
       CustomerKey: email,
-      // ИСПОЛЬЗУЕМ СТАНДАРТНЫЕ СТРАНИЦЫ ТИНЬКОФФ
+      // СТАНДАРТНЫЕ СТРАНИЦЫ ТИНЬКОФФ
       SuccessURL: 'https://securepay.tinkoff.ru/html/payForm/success.html',
       FailURL: 'https://securepay.tinkoff.ru/html/payForm/fail.html',
       PayType: 'O', // O - одностадийная оплата
       Language: 'ru',
-      DATA: JSON.stringify({
+      // DATA как ОБЪЕКТ, а не строка
+      DATA: {
         Email: email,
         Username: username,
         Product: 'Game Currency',
         OrderId: orderId
-      })
+      }
     };
 
     // Генерируем токен
