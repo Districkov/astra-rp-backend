@@ -26,6 +26,8 @@ export default async function handler(req, res) {
   try {
     const { amount, email, username } = req.body;
 
+    console.log('📨 Получен запрос:', { amount, email, username });
+
     // Валидация
     if (!amount || !email || !username) {
       return res.status(400).json({
@@ -68,8 +70,8 @@ export default async function handler(req, res) {
         amount: Math.round(amount * 100), // в копейках
         description: `Пополнение игрового счета ASTRA RP для ${username}`,
         customerKey: email,
-        successURL: `https://astra-rp.fun/donate?success=true&order=${orderId}`,
-        failURL: `https://astra-rp.fun/donate?error=true&order=${orderId}`,
+        successURL: `${req.headers.origin}/donate?success=true&order=${orderId}`,
+        failURL: `${req.headers.origin}/donate?error=true&order=${orderId}`,
         data: {
           Email: email,
           Username: username,
@@ -86,7 +88,7 @@ export default async function handler(req, res) {
     
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера'
+      error: 'Внутренняя ошибка сервера: ' + error.message
     });
   }
 }
