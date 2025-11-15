@@ -1,9 +1,9 @@
 import { createHash } from 'crypto';
 
 const TBANK_CONFIG = {
-  terminal: '1763019363347DEMO',
-  password: '_yu8*mk*O9Kpx^v2',
-  baseUrl: 'https://securepay.tinkoff.ru/v2' // Возвращаем оригинальный URL
+  terminal: '1763019363416', // РАБОЧИЙ терминал
+  password: '4NvQuyKHGqYGLr0h', // РАБОЧИЙ пароль
+  baseUrl: 'https://securepay.tinkoff.ru/v2'
 };
 
 function generateToken(data) {
@@ -15,9 +15,13 @@ function generateToken(data) {
     Description: data.Description,
     CustomerKey: data.CustomerKey,
     SuccessURL: data.SuccessURL,
-    FailURL: data.FailURL,
-    DATA: JSON.stringify(data.DATA)
+    FailURL: data.FailURL
   };
+  
+  // DATA добавляем только если есть и не пустой
+  if (data.DATA && Object.keys(data.DATA).length > 0) {
+    values.DATA = JSON.stringify(data.DATA);
+  }
   
   const sortedKeys = Object.keys(values).sort();
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
@@ -95,10 +99,9 @@ export default async function handler(req, res) {
     // Генерируем токен
     paymentData.Token = generateToken(paymentData);
 
-    console.log('🔄 Инициализация платежа');
+    console.log('🔄 Инициализация платежа (РАБОЧИЙ терминал)');
     console.log('📤 Данные для Т-Банк:', JSON.stringify(paymentData, null, 2));
 
-    // Пробуем с обработкой разных типов ответов
     const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: {
@@ -107,34 +110,12 @@ export default async function handler(req, res) {
       body: JSON.stringify(paymentData),
     });
 
-    // Проверяем тип ответа
-    const contentType = tbankResponse.headers.get('content-type');
-    let result;
-
-    if (contentType && contentType.includes('application/json')) {
-      result = await tbankResponse.json();
-    } else {
-      // Если не JSON, читаем как текст
-      const text = await tbankResponse.text();
-      console.log('📥 Ответ от Т-Банк (текст):', text.substring(0, 500)); // Первые 500 символов
-      
-      // Пробуем распарсить как JSON, если возможно
-      try {
-        result = JSON.parse(text);
-      } catch (e) {
-        result = {
-          Success: false,
-          ErrorCode: 'HTTP_ERROR',
-          Message: 'Сервер вернул не JSON ответ',
-          Details: text.substring(0, 200)
-        };
-      }
-    }
+    const result = await tbankResponse.json();
 
     console.log('📥 Ответ от Т-Банк:', JSON.stringify(result, null, 2));
 
     if (result.Success) {
-      console.log('✅ Платеж инициализирован');
+      console.log('✅ Платеж инициализирован!');
       
       return res.json({
         success: true,
@@ -143,16 +124,7 @@ export default async function handler(req, res) {
         orderId: paymentData.OrderId
       });
     } else {
-      console.error('❌ Ошибка Т-Банк');
-      
-      // Если это демо-терминал, возможно нужно зарегистрировать реальный
-      if (result.ErrorCode === '204') {
-        return res.status(400).json({
-          success: false,
-          error: 'Демо-терминал не работает. Нужно зарегистрировать реальный терминал в Тинькофф',
-          details: 'Перейдите в личный кабинет Тинькофф Кассы для настройки'
-        });
-      }
+      console.error('❌ Ошибка Т-Банк:', result);
       
       return res.status(400).json({
         success: false,
@@ -163,11 +135,11 @@ export default async function handler(req, res) {
     }
 
   } catch (error) {
-    console.error('🔥 Серверная ошибка:', error.message);
+    console.error('🔥 Серверная ошибка:', error);
     
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера: ' + error.message
+      error: 'Внутренняя ошибка сервера'
     });
   }
 }
