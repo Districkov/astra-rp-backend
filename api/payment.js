@@ -1,3 +1,32 @@
+import { createHash } from 'crypto';
+
+const TBANK_CONFIG = {
+  terminal: '1763019363347DEMO',
+  password: '_yu8*mk*09Kpx^v2',
+  baseUrl: 'https://securepay.tinkoff.ru/v2'
+};
+
+function generateToken(data) {
+  const values = {
+    TerminalKey: TBANK_CONFIG.terminal,
+    Password: TBANK_CONFIG.password,
+    Amount: data.Amount,
+    OrderId: data.OrderId,
+    Description: data.Description,
+    CustomerKey: data.CustomerKey,
+    SuccessURL: data.SuccessURL,
+    FailURL: data.FailURL,
+    DATA: JSON.stringify(data.DATA)
+  };
+  
+  const sortedKeys = Object.keys(values).sort();
+  const concatenatedValues = sortedKeys.map(key => values[key]).join('');
+  
+  console.log('🔑 Данные для токена:', concatenatedValues);
+  
+  return createHash('sha256').update(concatenatedValues).digest('hex');
+}
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,14 +37,12 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Health check endpoint
   if (req.method === 'GET') {
     return res.json({ 
       status: 'OK', 
       service: 'Astra RP Payment API',
-      mode: 'TEST_WIDGET',
       timestamp: new Date().toISOString(),
-      message: 'API готов к работе с виджетом Тинькофф'
+      message: 'API готов к тестовым платежам'
     });
   }
 
@@ -26,9 +53,6 @@ export default async function handler(req, res) {
   try {
     const { amount, email, username } = req.body;
 
-    console.log('📨 Получен запрос:', { amount, email, username });
-
-    // Валидация
     if (!amount || !email || !username) {
       return res.status(400).json({
         success: false,
@@ -43,7 +67,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Валидация email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -53,42 +76,65 @@ export default async function handler(req, res) {
     }
 
     const orderId = `ASTRA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const paymentData = {
+      TerminalKey: TBANK_CONFIG.terminal,
+      OrderId: orderId,
+      Amount: Math.round(amount * 100),
+      Description: `Пополнение игрового счета ASTRA RP для ${username}`,
+      CustomerKey: email,
+      SuccessURL: `https://astra-rp.fun/donate?success=true&order=${orderId}`,
+      FailURL: `https://astra-rp.fun/donate?error=true&order=${orderId}`,
+      DATA: {
+        Email: email,
+        Username: username,
+        Product: 'Game Currency'
+      }
+    };
 
-    console.log('🔄 Подготовка данных для виджета Тинькофф:', {
-      orderId,
-      amount, 
-      email,
-      username
-    });
+    // Генерируем токен
+    paymentData.Token = generateToken(paymentData);
 
-    // Возвращаем данные для виджета Тинькофф
-    return res.json({
-      success: true,
-      widgetConfig: {
-        terminalKey: '1763019363347DEMO', // Демо-терминал
-        orderId: orderId,
-        amount: Math.round(amount * 100), // в копейках
-        description: `Пополнение игрового счета ASTRA RP для ${username}`,
-        customerKey: email,
-        successURL: `${req.headers.origin}/donate?success=true&order=${orderId}`,
-        failURL: `${req.headers.origin}/donate?error=true&order=${orderId}`,
-        data: {
-          Email: email,
-          Username: username,
-          Product: 'Game Currency'
-        }
+    console.log('🔄 Инициализация платежа (ТЕСТ):', paymentData);
+
+    const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      orderId: orderId,
-      testMode: true,
-      message: 'Готово к открытию виджета Тинькофф'
+      body: JSON.stringify(paymentData),
     });
+
+    const result = await tbankResponse.json();
+
+    console.log('📥 Ответ от Т-Банк (ТЕСТ):', result);
+
+    if (result.Success) {
+      console.log('✅ Платеж инициализирован!');
+      
+      return res.json({
+        success: true,
+        paymentId: result.PaymentId,
+        paymentUrl: result.PaymentURL,
+        orderId: paymentData.OrderId
+      });
+    } else {
+      console.error('❌ Ошибка Т-Банк:', result);
+      
+      return res.status(400).json({
+        success: false,
+        error: result.Message || 'Ошибка инициализации платежа',
+        details: result.Details,
+        errorCode: result.ErrorCode
+      });
+    }
 
   } catch (error) {
     console.error('🔥 Серверная ошибка:', error);
     
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера: ' + error.message
+      error: 'Внутренняя ошибка сервера'
     });
   }
 }
