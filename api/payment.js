@@ -1,86 +1,92 @@
-const processTbankPayment = async () => {
-  try {
-    console.log('🔄 Отправка платежа...');
-    
-    const response = await fetch(API_CONFIG.baseUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: amount,
-        email: email,
-        username: username
-      })
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method === 'GET') {
+    return res.json({ 
+      status: 'OK', 
+      service: 'Astra RP Payment API',
+      mode: 'TINKOFF_TEST_WIDGET',
+      timestamp: new Date().toISOString(),
+      message: 'API ready for Tinkoff test widget'
     });
+  }
 
-    const result = await response.json();
-    console.log('📦 Данные ответа:', result);
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    if (result.success && result.paymentData) {
-      setPaymentStatus({
-        type: 'success',
-        message: `Создан тестовый платеж. Заказ №${result.orderId}`
+  try {
+    const { amount, email, username } = req.body;
+
+    console.log('Received payment request:', { amount, email, username });
+
+    // Validation
+    if (!amount || !email || !username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Fill all required fields'
       });
-
-      // Сохраняем данные
-      localStorage.setItem('lastPayment', JSON.stringify({
-        orderId: result.orderId,
-        amount: amount,
-        username: username,
-        email: email,
-        timestamp: Date.now()
-      }));
-
-      // Открываем виджет Тинькофф
-      openTinkoffWidget(result.paymentData);
-
-    } else {
-      throw new Error(result.error || 'Неизвестная ошибка от сервера');
     }
 
+    if (amount < 10 || amount > 50000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Amount must be from 10₽ to 50,000₽'
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Enter valid email address'
+      });
+    }
+
+    const orderId = 'TEST_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+    console.log('Creating test payment:', { orderId, amount, email, username });
+
+    // For TEST mode use direct widget integration
+    const paymentData = {
+      TerminalKey: '1763019363347DEMO',
+      OrderId: orderId,
+      Amount: Math.round(amount * 100),
+      Description: 'Test payment ASTRA RP for ' + username,
+      CustomerKey: email,
+      SuccessURL: (req.headers.origin || 'https://astra-rp.fun') + '/donate?success=true&order=' + orderId,
+      FailURL: (req.headers.origin || 'https://astra-rp.fun') + '/donate?error=true&order=' + orderId,
+      DATA: JSON.stringify({
+        Email: email,
+        Username: username,
+        Product: 'Game Currency',
+        Test: true
+      })
+    };
+
+    // In test mode return data for widget
+    return res.json({
+      success: true,
+      paymentData: paymentData,
+      orderId: orderId,
+      testMode: true,
+      message: 'Test payment created. Use Tinkoff widget for payment.',
+      instructions: 'Test cards: 4111 1111 1111 1111 (success), 2200 0000 0000 0001 (error)'
+    });
+
   } catch (error) {
-    console.error('🔥 Ошибка платежа:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Ошибка соединения с сервером платежей';
-    setPaymentStatus({ type: 'error', message: errorMessage });
-    throw error;
+    console.error('Server error:', error);
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error: ' + error.message
+    });
   }
-};
-
-// Функция для открытия виджета Тинькофф
-const openTinkoffWidget = (paymentData: any) => {
-  // Создаем форму для Тинькофф
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'https://securepay.tinkoff.ru/e2c/v2/Init';
-  form.style.display = 'none';
-
-  // Добавляем все необходимые поля
-  const fields = {
-    TerminalKey: paymentData.TerminalKey,
-    OrderId: paymentData.OrderId,
-    Amount: paymentData.Amount.toString(),
-    Description: paymentData.Description,
-    CustomerKey: paymentData.CustomerKey,
-    SuccessURL: paymentData.SuccessURL,
-    FailURL: paymentData.FailURL,
-    DATA: paymentData.DATA,
-    // Для тестового режима Token может быть пустым
-    Token: ''
-  };
-
-  Object.entries(fields).forEach(([key, value]) => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = key;
-    input.value = value;
-    form.appendChild(input);
-  });
-
-  document.body.appendChild(form);
-  
-  // Отправляем форму
-  setTimeout(() => {
-    form.submit();
-  }, 1000);
-};
+}
