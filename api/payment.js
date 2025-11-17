@@ -22,9 +22,9 @@ function generateToken(data) {
 
 module.exports = async function handler(req, res) {
   // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+res.setHeader('Access-Control-Allow-Origin', 'https://astra-rp.fun'); // ваш домен на Timeweb
+res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
