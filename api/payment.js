@@ -1,4 +1,5 @@
-const crypto = require('crypto');
+// /api/payment.js (ES modules)
+import { createHash } from 'crypto';
 
 const TBANK_CONFIG = {
   terminal: '1763019363347DEMO',
@@ -17,14 +18,14 @@ function generateToken(data) {
   const sortedKeys = Object.keys(values).sort();
   const concatenatedValues = sortedKeys.map(key => values[key]).join('');
   
-  return crypto.createHash('sha256').update(concatenatedValues).digest('hex');
+  return createHash('sha256').update(concatenatedValues).digest('hex');
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // CORS
-res.setHeader('Access-Control-Allow-Origin', 'https://astra-rp.fun'); // ваш домен на Timeweb
-res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Origin', 'https://astra-rp.fun');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -46,10 +47,13 @@ res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   try {
     const { amount, email, username } = req.body;
 
+    console.log('📥 Получены данные:', { amount, email, username });
+
+    // Валидация
     if (!amount || !email || !username) {
       return res.status(400).json({
         success: false,
-        error: 'Заполните все поля'
+        error: 'Заполните все обязательные поля'
       });
     }
 
@@ -61,8 +65,8 @@ res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       Amount: Math.round(amount * 100),
       Description: `Пополнение счета ASTRA RP для ${username}`,
       CustomerKey: email,
-      SuccessURL: `https://astra-rp.fun/payment-success.html?order=${orderId}&success=true`,
-      FailURL: `https://astra-rp.fun/payment-fail.html?order=${orderId}&error=true`,
+      SuccessURL: `https://astra-rp.fun/payment-success?order=${orderId}&success=true`,
+      FailURL: `https://astra-rp.fun/payment-fail?order=${orderId}&error=true`,
       DATA: JSON.stringify({ 
         Email: email, 
         Username: username,
@@ -72,18 +76,15 @@ res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     paymentData.Token = generateToken(paymentData);
 
-    console.log('🔄 Отправка в Т-Банк:', {
-      orderId: paymentData.OrderId,
-      amount: paymentData.Amount
-    });
+    console.log('🔄 Отправка в Т-Банк:', paymentData.OrderId);
 
-    const response = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
+    const tbankResponse = await fetch(`${TBANK_CONFIG.baseUrl}/Init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(paymentData)
     });
 
-    const result = await response.json();
+    const result = await tbankResponse.json();
 
     console.log('📥 Ответ Т-Банк:', result);
 
@@ -92,7 +93,8 @@ res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         success: true,
         paymentId: result.PaymentId,
         paymentUrl: result.PaymentURL,
-        orderId: orderId
+        orderId: orderId,
+        environment: 'test'
       });
     } else {
       return res.status(400).json({
@@ -109,4 +111,4 @@ res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       error: 'Внутренняя ошибка сервера'
     });
   }
-};
+}
