@@ -1,15 +1,9 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    }
-  ]
+  "name": "tbank-payment-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend for Tbank payments",
+  "scripts": {
+    "dev": "vercel dev"
+  }
 }
